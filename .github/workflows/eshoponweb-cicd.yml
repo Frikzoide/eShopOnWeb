@@ -9,7 +9,7 @@ env:
   LOCATION: eastus
   TEMPLATE-FILE: infra/webapp.bicep
   SUBSCRIPTION-ID: c6e92b95-0d02-42a1-b8f5-e07881d3a548
-  WEBAPP-NAME: eshoponweb-webapp-AHHH
+  WEBAPP-NAME: eshoponweb-webapp-YAGOCAS
 
 
 jobs:
