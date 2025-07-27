@@ -1,4 +1,4 @@
-name: eShopOnWeb Build and Test
+name: eShopOnWeb Build and Deploy
 
 on: [push, workflow_dispatch]
 
@@ -6,14 +6,16 @@ env:
   RESOURCE_GROUP: rg-treinamento-01
   LOCATION: eastus
   TEMPLATE_FILE: infra/webapp.bicep
+  PARAMETERS_FILE: infra/parameters.json
   SUBSCRIPTION_ID: c6e92b95-0d02-42a1-b8f5-e07881d3a548
-  WEBAPP_NAME: eshoponweb-webapp-fsdgdfagdfgdafg
+  WEBAPP_NAME: app-web- eShopOnWeb-01
 
 jobs:
   buildandtest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -21,13 +23,13 @@ jobs:
           dotnet-version: '8.0.x'
           dotnet-quality: 'preview'
 
-      - name: Build with dotnet
+      - name: Build project
         run: dotnet build ./eShopOnWeb.sln --configuration Release
 
-      - name: Test with dotnet
+      - name: Test project
         run: dotnet test ./eShopOnWeb.sln --configuration Release
 
-      - name: dotnet publish
+      - name: Publish app
         run: |
           dotnet publish ./src/Web/Web.csproj -c Release -o ./publish
           cd ./publish
@@ -43,7 +45,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bicep-template
-          path: ${{ env.TEMPLATE_FILE }}
+          path: |
+            ${{ env.TEMPLATE_FILE }}
+            ${{ env.PARAMETERS_FILE }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -68,18 +72,29 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Enable CLI debug
+        run: az config set core.only_show_errors=false
+
+      - name: Validate Bicep template
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az deployment group validate \
+              --subscription ${{ env.SUBSCRIPTION_ID }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --template-file bicep-template/webapp.bicep \
+              --parameters bicep-template/parameters.json
+
       - name: Deploy with Bicep
         uses: azure/arm-deploy@v2
         with:
           subscriptionId: ${{ env.SUBSCRIPTION_ID }}
           resourceGroupName: ${{ env.RESOURCE_GROUP }}
           template: bicep-template/webapp.bicep
-          parameters: >
-            webAppName=${{ env.WEBAPP_NAME }}
-            location=${{ env.LOCATION }}
+          parameters: bicep-template/parameters.json
           failOnStdErr: false
 
-      - name: Publish Website using Azure CLI
+      - name: Deploy app via CLI
         uses: azure/cli@v2
         with:
           inlineScript: |
