@@ -66,15 +66,20 @@ jobs:
       - name: List files for debugging
         run: ls -R
 
-      - name: Enable Debug Logging
-        run: |
-          echo "ACTIONS_STEP_DEBUG=true" >> $GITHUB_ENV
-          echo "ACTIONS_RUNNER_DEBUG=true" >> $GITHUB_ENV
-
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Etapa extra de validação — exibe erro real no log
+      - name: Validate Bicep template (diagnóstico)
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az deployment group validate \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --template-file bicep-template/webapp.bicep \
+              --parameters webAppName=${{ env.WEBAPP_NAME }} location=${{ env.LOCATION }}
 
       - name: Deploy infrastructure with Bicep
         uses: azure/arm-deploy@v2
@@ -88,7 +93,7 @@ jobs:
           failOnStdErr: false
 
       - name: Publish Website to WebApp
-        uses: Azure/cli@v2
+        uses: azure/cli@v2
         with:
           inlineScript: |
             az webapp deploy \
