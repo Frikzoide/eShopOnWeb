@@ -29,17 +29,17 @@ jobs:
 
       - name: dotnet publish
         run: |
-          dotnet publish ./src/Web/Web.csproj -c Release -o ${{ env.DOTNET_ROOT }}/myapp
-          cd ${{ env.DOTNET_ROOT }}/myapp
+          dotnet publish ./src/Web/Web.csproj -c Release -o ./publish
+          cd ./publish
           zip -r ../app.zip .
 
-      - name: Upload artifact for deployment job
+      - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
           name: dotnet-app
-          path: ${{ env.DOTNET_ROOT }}/app.zip
+          path: app.zip
 
-      - name: Upload Bicep template artifact for deployment job
+      - name: Upload Bicep template
         uses: actions/upload-artifact@v4
         with:
           name: bicep-template
@@ -51,13 +51,13 @@ jobs:
     environment:
       name: 'Development'
     steps:
-      - name: Download dotnet app artifact
+      - name: Download app artifact
         uses: actions/download-artifact@v4
         with:
           name: dotnet-app
           path: dotnet-app
 
-      - name: Download Bicep template artifact
+      - name: Download Bicep template
         uses: actions/download-artifact@v4
         with:
           name: bicep-template
@@ -68,17 +68,23 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy Azure WebApp using Bicep
+      - name: Deploy with Bicep
         uses: azure/arm-deploy@v2
         with:
           subscriptionId: ${{ env.SUBSCRIPTION_ID }}
           resourceGroupName: ${{ env.RESOURCE_GROUP }}
           template: bicep-template/webapp.bicep
-          parameters: webAppName=${{ env.WEBAPP_NAME }} location=${{ env.LOCATION }}
+          parameters: >
+            webAppName=${{ env.WEBAPP_NAME }}
+            location=${{ env.LOCATION }}
           failOnStdErr: false
 
-      - name: Publish Website to WebApp via Azure CLI
+      - name: Publish Website using Azure CLI
         uses: azure/cli@v2
         with:
           inlineScript: |
-            az webapp deploy --name ${{ env.WEBAPP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --src-path dotnet-app/app.zip --type zip
+            az webapp deploy \
+              --name ${{ env.WEBAPP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --src-path dotnet-app/app.zip \
+              --type zip
