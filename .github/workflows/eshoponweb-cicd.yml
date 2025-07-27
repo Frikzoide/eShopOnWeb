@@ -3,47 +3,47 @@ name: eShopOnWeb Build and Test
 on: [push, workflow_dispatch]
 
 env:
-  RESOURCE_GROUP: rg-treinamento-01
+  RESOURCE-GROUP: rg-treinamento-01
   LOCATION: eastus
-  TEMPLATE_FILE: infra/webapp.bicep
-  SUBSCRIPTION_ID: c6e92b95-0d02-42a1-b8f5-e07881d3a548
-  WEBAPP_NAME: eshoponweb-webapp-yago
+  TEMPLATE-FILE: infra/webapp.bicep
+  SUBSCRIPTION-ID: c6e92b95-0d02-42a1-b8f5-e07881d3a548
+  WEBAPP-NAME: eshoponweb-webapp-treinamento
 
 jobs:
   buildandtest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-          dotnet-quality: 'preview'
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        dotnet-quality: 'preview'
 
-      - name: Build with dotnet
-        run: dotnet build ./eShopOnWeb.sln --configuration Release
+    - name: Build with dotnet
+      run: dotnet build ./eShopOnWeb.sln --configuration Release
 
-      - name: Test with dotnet
-        run: dotnet test ./eShopOnWeb.sln --configuration Release
+    - name: Test with dotnet
+      run: dotnet test ./eShopOnWeb.sln --configuration Release
 
-      - name: dotnet publish
-        run: |
-          dotnet publish ./src/Web/Web.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp
-          cd ${{env.DOTNET_ROOT}}/myapp
-          zip -r ../app.zip .
+    - name: dotnet publish
+      run: |
+        dotnet publish ./src/Web/Web.csproj -c Release -o ${{ env.DOTNET_ROOT }}/myapp
+        cd ${{ env.DOTNET_ROOT }}/myapp
+        zip -r ../app.zip .
 
-      - name: Upload artifact for deployment job (app)
-        uses: actions/upload-artifact@v4
-        with:
-          name: .net-app
-          path: ${{env.DOTNET_ROOT}}/app.zip
+    - name: Upload artifact for deployment job - app
+      uses: actions/upload-artifact@v4
+      with:
+        name: .net-app
+        path: ${{ env.DOTNET_ROOT }}/app.zip
 
-      - name: Upload artifact for deployment job (bicep)
-        uses: actions/upload-artifact@v4
-        with:
-          name: bicep-template
-          path: ${{ env.TEMPLATE_FILE }}
+    - name: Upload artifact for deployment job - bicep
+      uses: actions/upload-artifact@v4
+      with:
+        name: bicep-template
+        path: ${{ env.TEMPLATE-FILE }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -51,53 +51,40 @@ jobs:
     environment:
       name: 'Development'
     steps:
-      - name: Download artifact from build job (.NET App)
-        uses: actions/download-artifact@v4
-        with:
-          name: .net-app
-          path: .net-app
+    - name: Download artifact - app
+      uses: actions/download-artifact@v4
+      with:
+        name: .net-app
+        path: .net-app
 
-      - name: Download artifact from build job (Bicep)
-        uses: actions/download-artifact@v4
-        with:
-          name: bicep-template
-          path: bicep-template
+    - name: Download artifact - bicep
+      uses: actions/download-artifact@v4
+      with:
+        name: bicep-template
+        path: bicep-template
 
-      - name: List files for debugging
-        run: ls -R
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: Deploy infrastructure using Bicep via Azure CLI
+      uses: azure/cli@v2
+      with:
+        inlineScript: |
+          az account set --subscription ${{ env.SUBSCRIPTION-ID }}
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE-GROUP }} \
+            --template-file bicep-template/webapp.bicep \
+            --parameters webAppName=${{ env.WEBAPP-NAME }} location=${{ env.LOCATION }}
 
-      # Etapa extra de validação — exibe erro real no log
-      - name: Validate Bicep template (diagnóstico)
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            az deployment group validate \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --template-file bicep-template/webapp.bicep \
-              --parameters webAppName=${{ env.WEBAPP_NAME }} location=${{ env.LOCATION }}
+    - name: Publish Website to WebApp using CLI
+      uses: azure/cli@v2
+      with:
+        inlineScript: |
+          az webapp deploy \
+            --name ${{ env.WEBAPP-NAME }} \
+            --resource-group ${{ env.RESOURCE-GROUP }} \
+            --src-path .net-app/app.zip \
+            --type zip
 
-      - name: Deploy infrastructure with Bicep
-        uses: azure/arm-deploy@v2
-        with:
-          subscriptionId: ${{ env.SUBSCRIPTION_ID }}
-          resourceGroupName: ${{ env.RESOURCE_GROUP }}
-          template: bicep-template/webapp.bicep
-          parameters: >
-            webAppName=${{ env.WEBAPP_NAME }}
-            location=${{ env.LOCATION }}
-          failOnStdErr: false
-
-      - name: Publish Website to WebApp
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            az webapp deploy \
-              --name ${{ env.WEBAPP_NAME }} \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --src-path .net-app/app.zip \
-              --type zip
